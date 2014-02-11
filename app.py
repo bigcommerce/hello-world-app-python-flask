@@ -1,7 +1,7 @@
 import json
 import pprint
 import flask
-import bigcommerce as api
+import bigcommerce
 from string import Template
 
 app = flask.Flask(__name__)  # do __name__.split('.')[0] if initialising from a file not at project root
@@ -52,7 +52,7 @@ def render(template, context):
 @app.route('/auth/start')  # the load url
 def auth_start():
     # get and check payload
-    user_data = api.OAuthConnection.verify_payload(flask.request.args['signed_payload'],
+    user_data = bigcommerce.api.BigcommerceApi.oauth_verify_payload(flask.request.args['signed_payload'],
                                                    app.config['APP_CLIENT_SECRET'])
 
     if not user_data: return "You Shall Not Pass!!!"  # verification failed
@@ -67,9 +67,9 @@ def auth_start():
     # make a client for this user
     global user_clients
     if not userid in user_clients:
-        client = api.OAuthConnection(cid,
-                                     user_data['store_hash'],
-                                     access_token=token['access_token'])
+        client = bigcommerce.api.BigcommerceApi(client_id=cid,
+                                                store_hash=user_data['store_hash'],
+                                                access_token=token['access_token'])
         user_clients[userid] = client
     flask.session['userid'] = userid
 
@@ -87,11 +87,11 @@ def auth_callback():
     secret = app.config['APP_CLIENT_SECRET']
     redirect = app.config['APP_URL'] + flask.url_for('auth_callback')
 
-    client = api.OAuthConnection(app.config['APP_CLIENT_ID'],
-                                 context.split('/')[1])  # this is the store hash
+    client = bigcommerce.api.BigcommerceApi(client_id=app.config['APP_CLIENT_ID'],
+                                            store_hash=context.split('/')[1])  # this is the store hash
 
     # as a side-effect, also sets up the client object to be ready for future requests
-    token = client.fetch_token(secret, code, context, scope, redirect, 'https://login.bigcommerce.com/oauth2/token')
+    token = client.oauth_fetch_token(secret, code, context, scope, redirect)
 
     # save the user's data in a json file for when they want to
     userid = int(token['user']['id'])
@@ -111,7 +111,7 @@ def index():
     # Fetch some products to display
     global user_clients
     client = user_clients[flask.session['userid']]
-    products = ["<li>{} - {}</li>".format(p.name, p.price) for p in client.get('products', limit=5)]
+    products = ["<li>{} - {}</li>".format(p.name, p.price) for p in client.Products.all(limit=5)]
     return render('templates/index.html', {'products': '\n'.join(products)})
 
 if __name__ == "__main__":

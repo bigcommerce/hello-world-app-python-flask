@@ -1,7 +1,7 @@
 # Bigcommerce Sample App: Hello World in Python and Flask
 
 A sample Flask app which demonstrates using the [Bigcommerce
-API](https://pypi.python.org/pypi/bigcommerce-api) as an integrated app within the Bigcommerce control panel.
+API](https://pypi.python.org/pypi/bigcommerce) as a single click app within the Bigcommerce control panel.
 
 ## Getting Started
 
@@ -10,14 +10,14 @@ API](https://pypi.python.org/pypi/bigcommerce-api) as an integrated app within t
 First, clone the repository and set up the Python dependencies:
 
 ```bash
-git clone git@github.com:bigcommerce-labs/integrated-apps-python-flask-example.git
-cd integrated-apps-python-flask-example/
+git clone git@github.com:bigcommerce/hello-world-app-python-flask.git
+cd hello-world-app-python-flask/
 
-# If you want to use virtualenv
+# If you want to use virtualenv (Tested with python 2.7 and 3.3)
 virtualenv ENV/ --python=python2.7
 source ENV/bin/activate
 
-# Install dependencies (Flask, bigcommerce-api) through pip
+# Install dependencies (Flask, bigcommerce) through pip
 pip install -r requirements.txt
 
 cp config.default.py config.py
@@ -25,7 +25,7 @@ cp config.default.py config.py
 
 ### Create application tokens
 
-Head to the [Bigcommerce developer portal](https://developers.bigcommerceapp.com/) and sign
+Head to the [Bigcommerce developer portal](https://developer.bigcommerce.com/) and sign
 in/create a developer account.
 
 Create an draft app on the 'My Apps' page. You'll be able to skip most of the set-up for now **except** for the Technical page.
