@@ -1,5 +1,4 @@
 ENV/
 *.pyc
 *.swp
-config.py
 data/*
