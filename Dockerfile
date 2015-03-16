@@ -1,7 +1,7 @@
 FROM bigcommerce/python:3.4.3
 
 RUN apt-get update &&\
-    apt-get install -y -q sqlite3 libsqlite3-dev libpq-dev &&\
+    apt-get install -y -q sqlite3 &&\
     rm -rf /var/lib/apt/lists/*
 
 ENV USE_ENV true

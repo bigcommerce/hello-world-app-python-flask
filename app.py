@@ -1,10 +1,11 @@
-import json
-import pprint
-import flask
-import dotenv
-import os
-import random
 from bigcommerce.api import BigcommerceApi
+import dotenv
+import flask
+from flask.ext.sqlalchemy import SQLAlchemy
+import json
+import os
+import pprint
+import random
 from string import Template
 
 # do __name__.split('.')[0] if initialising from a file not at project root
@@ -22,13 +23,44 @@ app.config['APP_URL'] = os.getenv('APP_URL', 'http://localhost:5000') # must be 
 app.config['APP_CLIENT_ID'] = os.getenv('APP_CLIENT_ID')
 app.config['APP_CLIENT_SECRET'] = os.getenv('APP_CLIENT_SECRET')
 app.config['SESSION_SECRET'] = os.getenv('SESSION_SECRET', os.urandom(64))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///%s' % os.getenv('DATABASE_PATH', 'data/hello_world.db')
+app.config['SQLALCHEMY_ECHO'] = app.config['DEBUG']
 
+
+# Setup secure cookie secret
 app.secret_key = app.config['SESSION_SECRET']
 
-# We need a separate client for each user (typically users will be different stores)
-# (you could throw everything into a class if globals make your stomach turn)
-# TODO: add timeout for sessions (at the moment, they stay forever)
-user_clients = {}
+# Setup db
+db = SQLAlchemy(app)
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    bc_id = db.Column(db.Integer, nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+
+    store_id = db.Column(db.Integer, db.ForeignKey('store.id'), nullable=False)
+    store = db.relationship('Store', backref=db.backref('users', lazy='dynamic'))
+
+    def __init__(self, bc_id, email, store):
+        self.bc_id = bc_id
+        self.email = email
+        self.store = store
+
+    def __repr__(self):
+        return '<User id=%d bc_id=%d email=%s store_id=%d>' % (self.id, self.bc_id, self.email, self.store_id)
+
+
+class Store(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    store_hash = db.Column(db.String(16), nullable=False, unique=True)
+    access_token = db.Column(db.String(128), nullable=False)
+
+    def __init__(self, store_hash, access_token):
+        self.store_hash = store_hash
+        self.access_token = access_token
+
+    def __repr__(self):
+        return '<Store id=%d store_hash=%s access_token=%s>' % (self.id, self.store_hash, self.access_token)
 
 
 #
@@ -69,63 +101,99 @@ def client_id():
 def client_secret():
     return app.config['APP_CLIENT_SECRET']
 
+
 #
 # OAuth pages
 #
 
-@app.route('/bigcommerce/load')  # the load url
-def auth_start():
-    # get and check payload
-    user_data = BigcommerceApi.oauth_verify_payload(flask.request.args['signed_payload'], client_secret())
-    if not user_data:
-        return "You Shall Not Pass!!!"
-
-    # retrieve the user's token from a json file
-    # better to use a database, but this is simpler so...
-    userid = int(user_data['user']['id'])
-    with open('data/user{}.json'.format(userid), 'r') as f:
-        token = json.load(f)
-
-    # make a client for this user
-    global user_clients
-    if not userid in user_clients:
-        client = BigcommerceApi(client_id=client_id(),
-                                store_hash=user_data['store_hash'],
-                                access_token=token['access_token'])
-        user_clients[userid] = client
-    flask.session['userid'] = userid
-
-    return render('templates/start.html', {'user_data':user_data, 'token': token})
-
-
-@app.route('/bigcommerce/callback')  # the callback url
+# The Auth Callback URL. See https://developer.bigcommerce.com/api/callback
+@app.route('/bigcommerce/callback')
 def auth_callback():
-    # grab the GET params
+    # Put together params for token request
     code = flask.request.args['code']
     context = flask.request.args['context']
     scope = flask.request.args['scope']
     store_hash = context.split('/')[1]
-
-    # Compose redirect
     redirect = app.config['APP_URL'] + flask.url_for('auth_callback')
 
-    # Create api client
+    # Fetch the permanent oauth token. As a side-effect, also sets up the client
+    # object to be ready for future requests. This will throw an exception on error,
+    # which will get caught by our error handler above.
     client = BigcommerceApi(client_id=client_id(), store_hash=store_hash)
-
-    # as a side-effect, also sets up the client object to be ready for future requests
     token = client.oauth_fetch_token(client_secret(), code, context, scope, redirect)
+    bc_user_id = token['user']['id']
+    email = token['user']['email']
+    access_token = token['access_token']
 
-    # save the user's data in a json file for when they want to
-    userid = int(token['user']['id'])
-    with open('data/user{}.json'.format(userid), 'w') as f:  # note that this errors if data directory does not exist
-        json.dump(token, f)
+    # Create or update store
+    store = Store.query.filter_by(store_hash=store_hash).first()
+    if store is None:
+        store = Store(store_hash, access_token)
+    else:
+        store.access_token = access_token
 
-    # save client for this user
-    global user_clients
-    user_clients[userid] = client
-    flask.session['userid'] = userid
+    db.session.add(store)
+    db.session.commit()
 
-    return render('templates/callback.html', {})
+    # Create or update user
+    user = User.query.filter_by(bc_id=bc_user_id).first()
+    if user is None:
+        user = User(bc_user_id, email, store)
+    else:
+        user.email = email
+        user.store = store
+
+    db.session.add(user)
+    db.session.commit()
+
+    # Log user in and redirect to app home
+    flask.session['userid'] = user.id
+    return flask.redirect(flask.url_for('index'))
+
+
+# The Load URL. See https://developer.bigcommerce.com/api/load
+@app.route('/bigcommerce/load')
+def load():
+    # Decode and verify payload
+    payload = flask.request.args['signed_payload']
+    user_data = BigcommerceApi.oauth_verify_payload(payload, client_secret())
+    if user_data is False:
+        return "Payload verification failed!", 401
+
+    # Lookup user
+    user = User.query.filter_by(bc_id=user_data['user']['id']).first()
+    if user is None:
+        return "Not installed!", 401
+
+    # Log user in and redirect to app interface
+    flask.session['userid'] = user.id
+    return flask.redirect(flask.url_for('index'))
+
+
+# The Uninstall URL. See https://developer.bigcommerce.com/api/load
+@app.route('/bigcommerce/uninstall')
+def uninstall():
+    # Decode and verify payload
+    payload = flask.request.args['signed_payload']
+    user_data = BigcommerceApi.oauth_verify_payload(payload, client_secret())
+    if user_data is False:
+        return "Payload verification failed!", 401
+
+    # Lookup store
+    user = User.query.filter_by(bc_id=user_data['user']['id']).first()
+    if user is None:
+        return "Not installed!", 401
+
+    # Clean up: delete store owner and associated store. This logic is up to
+    # you. You may decide to keep these records around in case the user installs
+    # your app again.
+    db.session.delete(user)
+    db.session.delete(user.store)
+    db.session.commit()
+
+    # Log user out and return
+    flask.session.clear()
+    return flask.Response('Deleted', status=201)
 
 
 #
@@ -134,12 +202,21 @@ def auth_callback():
 
 @app.route('/')
 def index():
-    # Fetch some products to display
-    global user_clients
-    client = user_clients[flask.session['userid']]
+    # Lookup user
+    user = User.query.filter_by(id=flask.session['userid']).first()
+    if user is None:
+        return "Not logged in!", 401
+
+    # Construct api client
+    client = BigcommerceApi(client_id=client_id(),
+                            store_hash=user.store.store_hash,
+                            access_token=user.store.access_token)
+
+    # Fetch a few products and display them
     products = ["<li>{} - {}</li>".format(p.name, p.price) for p in client.Products.all(limit=5)]
     return render('templates/index.html', {'products': '\n'.join(products)})
 
 
 if __name__ == "__main__":
+    db.create_all()
     app.run(app.config['LISTEN_HOST'], app.config['LISTEN_PORT'])
