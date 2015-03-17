@@ -2,11 +2,10 @@ from bigcommerce.api import BigcommerceApi
 import dotenv
 import flask
 from flask.ext.sqlalchemy import SQLAlchemy
+from jinja2 import Template
 import json
 import os
-import pprint
 import random
-from string import Template
 
 # do __name__.split('.')[0] if initialising from a file not at project root
 app = flask.Flask(__name__)
@@ -26,7 +25,6 @@ app.config['SESSION_SECRET'] = os.getenv('SESSION_SECRET', os.urandom(64))
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///%s' % os.getenv('DATABASE_PATH', 'data/hello_world.db')
 app.config['SQLALCHEMY_ECHO'] = app.config['DEBUG']
 
-
 # Setup secure cookie secret
 app.secret_key = app.config['SESSION_SECRET']
 
@@ -37,17 +35,20 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     bc_id = db.Column(db.Integer, nullable=False)
     email = db.Column(db.String(120), nullable=False)
+    admin = db.Column(db.Boolean, nullable=False, default=False)
 
     store_id = db.Column(db.Integer, db.ForeignKey('store.id'), nullable=False)
     store = db.relationship('Store', backref=db.backref('users', lazy='dynamic'))
 
-    def __init__(self, bc_id, email, store):
+    def __init__(self, bc_id, email, store, admin=False):
         self.bc_id = bc_id
         self.email = email
         self.store = store
+        self.admin = admin
 
     def __repr__(self):
-        return '<User id=%d bc_id=%d email=%s store_id=%d>' % (self.id, self.bc_id, self.email, self.store_id)
+        return '<User id=%d bc_id=%d email=%s store_id=%d admin=%s>' % (self.id,
+                self.bc_id, self.email, self.store_id, self.admin)
 
 
 class Store(db.Model):
@@ -60,7 +61,8 @@ class Store(db.Model):
         self.access_token = access_token
 
     def __repr__(self):
-        return '<Store id=%d store_hash=%s access_token=%s>' % (self.id, self.store_hash, self.access_token)
+        return '<Store id=%d store_hash=%s access_token=%s>' % (self.id,
+                self.store_hash, self.access_token)
 
 
 #
@@ -93,7 +95,7 @@ def bad_request(e):
 def render(template, context):
     with open(template, 'r') as f:
         t = Template(f.read())
-        return t.substitute(context)
+        return t.render(context)
 
 def client_id():
     return app.config['APP_CLIENT_ID']
@@ -116,8 +118,7 @@ def auth_callback():
     store_hash = context.split('/')[1]
     redirect = app.config['APP_URL'] + flask.url_for('auth_callback')
 
-    # Fetch the permanent oauth token. As a side-effect, also sets up the client
-    # object to be ready for future requests. This will throw an exception on error,
+    # Fetch a permanent oauth token. This will throw an exception on error,
     # which will get caught by our error handler above.
     client = BigcommerceApi(client_id=client_id(), store_hash=store_hash)
     token = client.oauth_fetch_token(client_secret(), code, context, scope, redirect)
@@ -138,10 +139,11 @@ def auth_callback():
     # Create or update user
     user = User.query.filter_by(bc_id=bc_user_id).first()
     if user is None:
-        user = User(bc_user_id, email, store)
+        user = User(bc_user_id, email, store, True)
     else:
         user.email = email
         user.store = store
+        user.admin = True
 
     db.session.add(user)
     db.session.commit()
@@ -160,10 +162,22 @@ def load():
     if user_data is False:
         return "Payload verification failed!", 401
 
-    # Lookup user
-    user = User.query.filter_by(bc_id=user_data['user']['id']).first()
+    bc_user_id = user_data['user']['id']
+    email = user_data['user']['email']
+    store_hash = user_data['store_hash']
+
+    # Lookup store
+    store = Store.query.filter_by(store_hash=store_hash).first()
+    if store is None:
+        return "Store not found!", 401
+
+    # Lookup user and create if doesn't exist (this can happen if you enable multi-user
+    # when registering your app)
+    user = User.query.filter_by(bc_id=bc_user_id).first()
     if user is None:
-        return "Not installed!", 401
+        user = User(bc_user_id, email, store)
+        db.session.add(user)
+        db.session.commit()
 
     # Log user in and redirect to app interface
     flask.session['userid'] = user.id
@@ -180,20 +194,44 @@ def uninstall():
         return "Payload verification failed!", 401
 
     # Lookup store
-    user = User.query.filter_by(bc_id=user_data['user']['id']).first()
-    if user is None:
-        return "Not installed!", 401
+    store_hash = user_data['store_hash']
+    store = Store.query.filter_by(store_hash=store_hash).first()
+    if store is None:
+        return "Store not found!", 401
 
-    # Clean up: delete store owner and associated store. This logic is up to
-    # you. You may decide to keep these records around in case the user installs
+    # Clean up: delete store associated users. This logic is up to you.
+    # You may decide to keep these records around in case the user installs
     # your app again.
-    db.session.delete(user)
-    db.session.delete(user.store)
+    User.query.filter_by(store_id=store.id).delete()
+    db.session.delete(store)
     db.session.commit()
 
-    # Log user out and return
-    flask.session.clear()
-    return flask.Response('Deleted', status=201)
+    return flask.Response('Deleted', status=204)
+
+
+# The Remove User Callback URL.
+@app.route('/bigcommerce/remove-user')
+def remove_user():
+    # Decode and verify payload
+    payload = flask.request.args['signed_payload']
+    user_data = BigcommerceApi.oauth_verify_payload(payload, client_secret())
+    if user_data is False:
+        return "Payload verification failed!", 401
+
+    # Lookup store
+    store_hash = user_data['store_hash']
+    store = Store.query.filter_by(store_hash=store_hash).first()
+    if store is None:
+        return "Store not found!", 401
+
+    # Lookup user and delete it
+    bc_user_id = user_data['user']['id']
+    user = User.query.filter_by(bc_id=bc_user_id).first()
+    if user is not None:
+        db.session.delete(user)
+        db.session.commit()
+
+    return flask.Response('Deleted', status=204)
 
 
 #
@@ -212,9 +250,16 @@ def index():
                             store_hash=user.store.store_hash,
                             access_token=user.store.access_token)
 
-    # Fetch a few products and display them
-    products = ["<li>{} - {}</li>".format(p.name, p.price) for p in client.Products.all(limit=5)]
-    return render('templates/index.html', {'products': '\n'.join(products)})
+    # Fetch a few products
+    products = client.Products.all(limit=10)
+
+    # Render page
+    context = dict()
+    context['products'] = products
+    context['user'] = user
+    context['client_id'] = client_id()
+    context['api_url'] = client.connection.host
+    return render('templates/index.html', context)
 
 
 if __name__ == "__main__":
