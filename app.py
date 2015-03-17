@@ -2,11 +2,10 @@ from bigcommerce.api import BigcommerceApi
 import dotenv
 import flask
 from flask.ext.sqlalchemy import SQLAlchemy
+from jinja2 import Template
 import json
 import os
-import pprint
 import random
-from string import Template
 
 # do __name__.split('.')[0] if initialising from a file not at project root
 app = flask.Flask(__name__)
@@ -93,7 +92,7 @@ def bad_request(e):
 def render(template, context):
     with open(template, 'r') as f:
         t = Template(f.read())
-        return t.substitute(context)
+        return t.render(context)
 
 def client_id():
     return app.config['APP_CLIENT_ID']
@@ -212,9 +211,16 @@ def index():
                             store_hash=user.store.store_hash,
                             access_token=user.store.access_token)
 
-    # Fetch a few products and display them
-    products = ["<li>{} - {}</li>".format(p.name, p.price) for p in client.Products.all(limit=5)]
-    return render('templates/index.html', {'products': '\n'.join(products)})
+    # Fetch a few products
+    products = client.Products.all(limit=10)
+
+    # Render page
+    context = dict()
+    context['products'] = products
+    context['user'] = user
+    context['client_id'] = client_id()
+    context['api_url'] = client.connection.host
+    return render('templates/index.html', context)
 
 
 if __name__ == "__main__":
