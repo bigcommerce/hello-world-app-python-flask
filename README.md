@@ -18,6 +18,7 @@ app on the public Internet.
   * _Auth Callback URL_: `https://<app hostname>/bigcommerce/callback`
   * _Load Callback URL_: `https://<app hostname>/bigcommerce/load`
   * _Uninstall Callback URL_: `https://<app hostname>/bigcommerce/uninstall`
+  * _Remove User Callback URL_: `https://<app hostname>/bigcommerce/remove-user` (if enabling your app for multiple users)
 * Enable the _Products - Read Only_ scope under _OAuth scopes_, which is what this sample app needs.
 * Click `Save & Close` on the top right of the dialog.
 * You'll now see your app in a list in the _My Apps_ section of Develper Portal. Hover over it and click
