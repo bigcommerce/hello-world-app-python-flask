@@ -1,4 +1,4 @@
-FROM bigcommerce/python:3.4.3
+FROM hub.services.bigcommerceapp.com/bigcommerce/python:3.4.3
 
 RUN apt-get update &&\
     apt-get install -y -q sqlite3 &&\
