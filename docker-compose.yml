@@ -1,0 +1,16 @@
+dev:
+  extends:
+    service: hello_world_python
+    file: ../../docker-compose.yml
+  volumes:
+    - .:/opt/services/hello-world-app-python-flask
+  build: .
+
+prod:
+  image: hub.services.bigcommerceapp.com/bigcommerce/hello-world-python:latest
+  container_name: hello_world_python
+  hostname: hello_world_python
+  ports:
+    - '5000'
+  env_file:
+    - .env-example
