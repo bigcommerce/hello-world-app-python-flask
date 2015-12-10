@@ -3,8 +3,7 @@ dev:
     service: hello_world_python
     file: ../../docker-compose.yml
   volumes:
-    - .:/opt/services/hello-world-app-python-flask
-  build: .
+    - ./:/opt/services/hello-world-python
 
 prod:
   image: hub.services.bigcommerceapp.com/bigcommerce/hello-world-python:latest

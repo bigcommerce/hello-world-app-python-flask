@@ -50,20 +50,20 @@ class User(db.Model):
         return '<User id=%d bc_id=%d email=%s store_id=%d admin=%s>' % (self.id,
                 self.bc_id, self.email, self.store_id, self.admin)
 
-
 class Store(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     store_hash = db.Column(db.String(16), nullable=False, unique=True)
     access_token = db.Column(db.String(128), nullable=False)
+    scope = db.Column(db.String(128), nullable=False)
 
-    def __init__(self, store_hash, access_token):
+    def __init__(self, store_hash, access_token, scope):
         self.store_hash = store_hash
         self.access_token = access_token
+        self.scope = scope
 
     def __repr__(self):
-        return '<Store id=%d store_hash=%s access_token=%s>' % (self.id,
-                self.store_hash, self.access_token)
-
+        return '<Store id=%d store_hash=%s access_token=%s scope=%s>' % (self.id,
+                self.store_hash, self.access_token, self.scope)
 
 #
 # Error handling and helpers
@@ -103,7 +103,6 @@ def client_id():
 def client_secret():
     return app.config['APP_CLIENT_SECRET']
 
-
 #
 # OAuth pages
 #
@@ -125,13 +124,13 @@ def auth_callback():
     bc_user_id = token['user']['id']
     email = token['user']['email']
     access_token = token['access_token']
-
     # Create or update store
     store = Store.query.filter_by(store_hash=store_hash).first()
     if store is None:
-        store = Store(store_hash, access_token)
+        store = Store(store_hash, access_token, scope)
     else:
         store.access_token = access_token
+        store.scope = scope
 
     db.session.add(store)
     db.session.commit()
@@ -144,14 +143,12 @@ def auth_callback():
         user.email = email
         user.store = store
         user.admin = True
-
     db.session.add(user)
     db.session.commit()
 
     # Log user in and redirect to app home
     flask.session['userid'] = user.id
-    return flask.redirect(flask.url_for('index'))
-
+    return flask.redirect(app.config['APP_URL'])
 
 # The Load URL. See https://developer.bigcommerce.com/api/load
 @app.route('/bigcommerce/load')
@@ -181,8 +178,7 @@ def load():
 
     # Log user in and redirect to app interface
     flask.session['userid'] = user.id
-    return flask.redirect(flask.url_for('index'))
-
+    return flask.redirect(app.config['APP_URL'])
 
 # The Uninstall URL. See https://developer.bigcommerce.com/api/load
 @app.route('/bigcommerce/uninstall')
@@ -208,7 +204,6 @@ def uninstall():
 
     return flask.Response('Deleted', status=204)
 
-
 # The Remove User Callback URL.
 @app.route('/bigcommerce/remove-user')
 def remove_user():
@@ -232,7 +227,6 @@ def remove_user():
         db.session.commit()
 
     return flask.Response('Deleted', status=204)
-
 
 #
 # App interface
@@ -260,7 +254,6 @@ def index():
     context['client_id'] = client_id()
     context['api_url'] = client.connection.host
     return render('templates/index.html', context)
-
 
 if __name__ == "__main__":
     db.create_all()
