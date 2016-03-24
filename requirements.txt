@@ -6,5 +6,5 @@ itsdangerous==0.23
 requests==2.1.0
 streql==3.0.2
 python-dotenv==0.1.2
-bigcommerce==0.11.0
+bigcommerce==0.13.0
 Flask-SQLAlchemy==2.0
