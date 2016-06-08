@@ -6,7 +6,7 @@ dev:
     - ./:/opt/services/hello-world-python
 
 prod:
-  image: hub.services.bigcommerceapp.com/bigcommerce/hello-world-python:latest
+  image: 347907137948.dkr.ecr.us-east-1.amazonaws.com/hello-world-python:latest
   container_name: hello_world_python
   hostname: hello_world_python
   ports:
