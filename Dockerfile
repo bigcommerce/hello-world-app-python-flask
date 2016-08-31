@@ -1,4 +1,4 @@
-FROM bigcommerce/python:3.4.3
+FROM 347907137948.dkr.ecr.us-east-1.amazonaws.com/python:3.4.3
 
 RUN apt-get update &&\
     apt-get install -y -q sqlite3 &&\
