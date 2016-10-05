@@ -1,11 +1,9 @@
 from bigcommerce.api import BigcommerceApi
 import dotenv
 import flask
-from flask.ext.sqlalchemy import SQLAlchemy
-from jinja2 import Template
-import json
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import relationship
 import os
-import random
 
 # do __name__.split('.')[0] if initialising from a file not at project root
 app = flask.Flask(__name__)
@@ -18,11 +16,11 @@ if os.path.exists('.env'):
 app.config['DEBUG'] = True if os.getenv('DEBUG') == 'True' else False
 app.config['LISTEN_HOST'] = os.getenv('LISTEN_HOST', '0.0.0.0')
 app.config['LISTEN_PORT'] = int(os.getenv('LISTEN_PORT', '5000'))
-app.config['APP_URL'] = os.getenv('APP_URL', 'http://localhost:5000') # must be https to avoid browser issues
+app.config['APP_URL'] = os.getenv('APP_URL', 'http://localhost:5000')  # must be https to avoid browser issues
 app.config['APP_CLIENT_ID'] = os.getenv('APP_CLIENT_ID')
 app.config['APP_CLIENT_SECRET'] = os.getenv('APP_CLIENT_SECRET')
 app.config['SESSION_SECRET'] = os.getenv('SESSION_SECRET', os.urandom(64))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///%s' % os.getenv('DATABASE_PATH', 'data/hello_world.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///data/hello_world.sqlite')
 app.config['SQLALCHEMY_ECHO'] = app.config['DEBUG']
 
 # Setup secure cookie secret
@@ -31,30 +29,45 @@ app.secret_key = app.config['SESSION_SECRET']
 # Setup db
 db = SQLAlchemy(app)
 
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     bc_id = db.Column(db.Integer, nullable=False)
     email = db.Column(db.String(120), nullable=False)
-    admin = db.Column(db.Boolean, nullable=False, default=False)
+    storeusers = relationship("StoreUser", backref="user")
 
-    store_id = db.Column(db.Integer, db.ForeignKey('store.id'), nullable=False)
-    store = db.relationship('Store', backref=db.backref('users', lazy='dynamic'))
-
-    def __init__(self, bc_id, email, store, admin=False):
+    def __init__(self, bc_id, email):
         self.bc_id = bc_id
         self.email = email
-        self.store = store
+
+    def __repr__(self):
+        return '<User id=%d bc_id=%d email=%s>' % (self.id, self.bc_id, self.email)
+
+
+class StoreUser(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    store_id = db.Column(db.Integer, db.ForeignKey('store.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    admin = db.Column(db.Boolean, nullable=False, default=False)
+
+    def __init__(self, store, user, admin=False):
+        self.store_id = store.id
+        self.user_id = user.id
         self.admin = admin
 
     def __repr__(self):
-        return '<User id=%d bc_id=%d email=%s store_id=%d admin=%s>' % (self.id,
-                self.bc_id, self.email, self.store_id, self.admin)
+        return '<StoreUser id=%d email=%s user_id=%s store_id=%d  admin=%s>' \
+               % (self.id, self.user.email, self.user_id,  self.store.store_id, self.admin)
+
 
 class Store(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     store_hash = db.Column(db.String(16), nullable=False, unique=True)
     access_token = db.Column(db.String(128), nullable=False)
-    scope = db.Column(db.String(128), nullable=False)
+    scope = db.Column(db.String(256), nullable=False)
+    admin_storeuser_id = relationship("StoreUser",
+                                      primaryjoin="and_(StoreUser.store_id==Store.id, StoreUser.admin==True)")
+    storeusers = relationship("StoreUser", backref="store")
 
     def __init__(self, store_hash, access_token, scope):
         self.store_hash = store_hash
@@ -62,13 +75,13 @@ class Store(db.Model):
         self.scope = scope
 
     def __repr__(self):
-        return '<Store id=%d store_hash=%s access_token=%s scope=%s>' % (self.id,
-                self.store_hash, self.access_token, self.scope)
+        return '<Store id=%d store_hash=%s access_token=%s scope=%s>' \
+               % (self.id, self.store_hash, self.access_token, self.scope)
+
 
 #
 # Error handling and helpers
 #
-
 def error_info(e):
     content = ""
     try:  # it's probably a HttpException, if you're using the bigcommerce client
@@ -79,11 +92,13 @@ def error_info(e):
         content += "<br><br> (This page threw an exception: {})".format(str(e))
     return content
 
+
 @app.errorhandler(500)
 def internal_server_error(e):
     content = "Internal Server Error: " + str(e) + "<br>"
     content += error_info(e)
     return content, 500
+
 
 @app.errorhandler(400)
 def bad_request(e):
@@ -91,14 +106,15 @@ def bad_request(e):
     content += error_info(e)
     return content, 400
 
+
 # Helper for template rendering
 def render(template, context):
-    with open(template, 'r') as f:
-        t = Template(f.read())
-        return t.render(context)
+    return flask.render_template(template, **context)
+
 
 def client_id():
     return app.config['APP_CLIENT_ID']
+
 
 def client_secret():
     return app.config['APP_CLIENT_SECRET']
@@ -106,6 +122,7 @@ def client_secret():
 #
 # OAuth pages
 #
+
 
 # The Auth Callback URL. See https://developer.bigcommerce.com/api/callback
 @app.route('/bigcommerce/callback')
@@ -124,31 +141,46 @@ def auth_callback():
     bc_user_id = token['user']['id']
     email = token['user']['email']
     access_token = token['access_token']
+
     # Create or update store
     store = Store.query.filter_by(store_hash=store_hash).first()
     if store is None:
         store = Store(store_hash, access_token, scope)
+        db.session.add(store)
+        db.session.commit()
     else:
         store.access_token = access_token
         store.scope = scope
+        db.session.add(store)
+        db.session.commit()
+        # If the app was installed before, make sure the old admin user is no longer marked as the admin
+        oldadminuser = StoreUser.query.filter_by(store_id=store.id, admin=True).first()
+        if oldadminuser:
+            oldadminuser.admin = False
+            db.session.add(oldadminuser)
 
-    db.session.add(store)
-    db.session.commit()
-
-    # Create or update user
+    # Create or update global BC user
     user = User.query.filter_by(bc_id=bc_user_id).first()
     if user is None:
-        user = User(bc_user_id, email, store, True)
-    else:
+        user = User(bc_user_id, email)
+        db.session.add(user)
+    elif user.email != email:
         user.email = email
-        user.store = store
-        user.admin = True
-    db.session.add(user)
+        db.session.add(user)
+
+    # Create or update store user
+    storeuser = StoreUser.query.filter_by(user_id=user.id, store_id=store.id).first()
+    if not storeuser:
+        storeuser = StoreUser(store, user, admin=True)
+    else:
+        storeuser.admin = True
+    db.session.add(storeuser)
     db.session.commit()
 
     # Log user in and redirect to app home
-    flask.session['userid'] = user.id
+    flask.session['storeuserid'] = storeuser.id
     return flask.redirect(app.config['APP_URL'])
+
 
 # The Load URL. See https://developer.bigcommerce.com/api/load
 @app.route('/bigcommerce/load')
@@ -172,13 +204,19 @@ def load():
     # when registering your app)
     user = User.query.filter_by(bc_id=bc_user_id).first()
     if user is None:
-        user = User(bc_user_id, email, store)
+        user = User(bc_user_id, email)
         db.session.add(user)
+        db.session.commit()
+    storeuser = StoreUser.query.filter_by(user_id=user.id, store_id=store.id).first()
+    if storeuser is None:
+        storeuser = StoreUser(store, user)
+        db.session.add(storeuser)
         db.session.commit()
 
     # Log user in and redirect to app interface
-    flask.session['userid'] = user.id
+    flask.session['storeuserid'] = storeuser.id
     return flask.redirect(app.config['APP_URL'])
+
 
 # The Uninstall URL. See https://developer.bigcommerce.com/api/load
 @app.route('/bigcommerce/uninstall')
@@ -198,11 +236,14 @@ def uninstall():
     # Clean up: delete store associated users. This logic is up to you.
     # You may decide to keep these records around in case the user installs
     # your app again.
-    User.query.filter_by(store_id=store.id).delete()
+    storeusers = StoreUser.query.filter_by(store_id=store.id)
+    for storeuser in storeusers:
+        db.session.delete(storeuser)
     db.session.delete(store)
     db.session.commit()
 
     return flask.Response('Deleted', status=204)
+
 
 # The Remove User Callback URL.
 @app.route('/bigcommerce/remove-user')
@@ -223,26 +264,29 @@ def remove_user():
     bc_user_id = user_data['user']['id']
     user = User.query.filter_by(bc_id=bc_user_id).first()
     if user is not None:
-        db.session.delete(user)
+        storeuser = StoreUser.query.filter_by(user_id=user.id, store_id=store.id).first()
+        db.session.delete(storeuser)
         db.session.commit()
 
     return flask.Response('Deleted', status=204)
 
+
 #
 # App interface
 #
-
 @app.route('/')
 def index():
     # Lookup user
-    user = User.query.filter_by(id=flask.session['userid']).first()
-    if user is None:
+    storeuser = StoreUser.query.filter_by(id=flask.session['storeuserid']).first()
+    if storeuser is None:
         return "Not logged in!", 401
+    store = storeuser.store
+    user = storeuser.user
 
     # Construct api client
     client = BigcommerceApi(client_id=client_id(),
-                            store_hash=user.store.store_hash,
-                            access_token=user.store.access_token)
+                            store_hash=store.store_hash,
+                            access_token=store.access_token)
 
     # Fetch a few products
     products = client.Products.all(limit=10)
@@ -251,9 +295,19 @@ def index():
     context = dict()
     context['products'] = products
     context['user'] = user
+    context['store'] = store
     context['client_id'] = client_id()
     context['api_url'] = client.connection.host
-    return render('templates/index.html', context)
+    return render('index.html', context)
+
+
+@app.route('/instructions')
+def instructions():
+    if not app.config['DEBUG']:
+        return "Forbidden - instructions only visible in debug mode"
+    context = dict()
+    return render('instructions.html', context)
+
 
 if __name__ == "__main__":
     db.create_all()
