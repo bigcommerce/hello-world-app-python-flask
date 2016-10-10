@@ -8,6 +8,7 @@
     "flask"
   ],
   "repository": "https://github.com/bigcommerce/hello-world-app-python-flask",
+  "logo": "https://i.imgur.com/PEkdHpr.png",
   "success_url": "/instructions",
   "scripts": {
     "postdeploy": "python -c 'from app import db; db.create_all()'"
