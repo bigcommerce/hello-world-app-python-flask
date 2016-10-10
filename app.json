@@ -1,0 +1,47 @@
+{
+  "name": "BigCommerce Sample App, Python",
+  "description": "This app does one little thing, and does it well.",
+  "keywords": [
+    "bigcommerce",
+    "ecommerce",
+    "python",
+    "flask"
+  ],
+  "repository": "https://github.com/bigcommerce/hello-world-app-python-flask",
+  "success_url": "/instructions",
+  "scripts": {
+    "postdeploy": "python -c 'from app import db; db.create_all()'"
+  },
+  "env": {
+    "SESSION_SECRET": {
+      "description": "Random string used to secure the flask session cookie.",
+      "generator": "secret"
+    },
+    "APP_URL": {
+      "description": "The public URL of your Heroku app.",
+      "value": "This will be replaced after deployment"
+    },
+    "DEBUG": {
+      "description": "Boolean used to put Flask, SQLAlchemy, and other addons into a verbose logging and debug mode. Leave it True for now, but be sure to set it to False for a production app release!",
+      "value": "True"
+    },
+    "APP_CLIENT_ID": {
+      "description": "Replace this with the BigCommerce Client ID",
+      "value": "Client ID"
+    },
+    "APP_CLIENT_SECRET": {
+      "description": "Replace this with the BigCommerce Client Secret",
+      "value": "Client Secret"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "free"
+    }
+  },
+  "image": "heroku/python",
+  "addons": [
+    "heroku-postgresql"
+  ]
+}

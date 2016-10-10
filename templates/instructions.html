@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+    <head>
+        <style>
+            input{width:400px}
+        </style>
+    </head>
+    <body>
+      <h1>Heroku deployment successful</h1>
+      <h2>Final steps</h2>
+      <h3>Update app in BC dev portal</h3>
+      <p>To complete setup, please fill in these values in the <a href="https://devtools.bigcommerce.com" target="_blank">dev portal</a>:</p>
+      <table>
+      <tr><td>Callback URL: </td><td><input id="callback" value="" readonly></td></tr>
+      <tr><td>Load URL: </td><td><input id="load" value="" readonly></td></tr>
+      <tr><td>Uninstall URL: </td><td><input id="uninstall" value="" readonly></td></tr>
+      <tr><td>Remove User URL: </td><td><input id="remove" value="" readonly></td></tr>
+      </table>
+      <h3>Update Heroku environment variable</h3>
+      <p>One last step! You'll need to log into your Heroku account and set the APP_URL environment variable to: <input id="env" value="" readonly></p>
+      <p>If you have the Heroku CLI, you can just run this command: <input id="cli" value="" readonly></p>
+      <p><em>You can view Heroku's documentation on setting environment variables <a href="https://devcenter.heroku.com/articles/config-vars#setting-up-config-vars-for-a-deployed-application" target="_blank">here.</a></em></p>
+      <p>At this point, you should be able to <a href="https://github.com/bigcommerce/hello-world-app-python-flask#installing-the-app-in-your-trial-store" target="_blank">install the app in your store.</a></p>
+
+    </body>
+<script>
+    var base_url = window.location.protocol + "//" + window.location.host + "";
+    document.getElementById("callback").value = base_url + '/bigcommerce/callback';
+    document.getElementById("load").value = base_url + '/bigcommerce/load';
+    document.getElementById("uninstall").value = base_url + '/bigcommerce/uninstall';
+    document.getElementById("remove").value = base_url + '/bigcommerce/remove-user';
+    document.getElementById("env").value = base_url;
+    document.getElementById("cli").value = "heroku config:set APP_URL=" + base_url + " -a your-app-name";
+</script>
+</html>

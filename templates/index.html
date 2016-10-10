@@ -13,15 +13,15 @@
 
       <hr/>
       <h2>Store</h2>
-      <pre>{{user.store|e}}</pre>
+      <pre>{{store|e}}</pre>
 
       <hr/>
       <h2>CURL</h2>
       <pre>
         curl -XGET -v -H 'Accept: application/json'
                       -H 'X-Auth-Client: {{client_id}}'
-                      -H 'X-Auth-Token: {{user.store.access_token}}'
-                      https://{{api_url}}/stores/{{user.store.store_hash}}/v2/products
+                      -H 'X-Auth-Token: {{store.access_token}}'
+                      https://{{api_url}}/stores/{{store.store_hash}}/v2/products
       </pre>
 
       <hr/>
@@ -35,7 +35,7 @@
       <hr/>
       <h2>Scopes</h2>
       <ul>
-        {{ user.store.scope }}
+        {{ store.scope }}
       </ul>
     </body>
 </html>
