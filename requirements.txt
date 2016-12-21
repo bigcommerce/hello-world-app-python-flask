@@ -6,7 +6,7 @@ itsdangerous==0.24
 requests==2.11.1
 streql==3.0.2
 python-dotenv==0.6.0
-bigcommerce==0.17.0
+bigcommerce==0.17.1
 Flask-SQLAlchemy==2.1
 gunicorn==19.6.0
 psycopg2==2.6.2
