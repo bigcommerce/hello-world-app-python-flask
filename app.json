@@ -1,6 +1,6 @@
 {
   "name": "BigCommerce Sample App, Python",
-  "description": "This app does one little thing, and does it well.",
+  "description": "Sample app for the BigCommerce app store. Handles installation flow and runs an API request, uses the response data to render an interface.",
   "keywords": [
     "bigcommerce",
     "ecommerce",
