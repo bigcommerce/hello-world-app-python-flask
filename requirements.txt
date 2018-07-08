@@ -8,3 +8,4 @@ python-dotenv==0.6.4
 bigcommerce==0.18.1
 gunicorn==19.7.1
 psycopg2==2.7.1
+Flask-SQLAlchemy==2.3.2
