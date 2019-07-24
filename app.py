@@ -64,7 +64,7 @@ class Store(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     store_hash = db.Column(db.String(16), nullable=False, unique=True)
     access_token = db.Column(db.String(128), nullable=False)
-    scope = db.Column(db.String(256), nullable=False)
+    scope = db.Column(db.Text(), nullable=False)
     admin_storeuser_id = relationship("StoreUser",
                                       primaryjoin="and_(StoreUser.store_id==Store.id, StoreUser.admin==True)")
     storeusers = relationship("StoreUser", backref="store")
