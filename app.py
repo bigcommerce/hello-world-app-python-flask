@@ -4,6 +4,7 @@ import flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship
 import os
+import re
 
 # do __name__.split('.')[0] if initialising from a file not at project root
 app = flask.Flask(__name__)
@@ -11,6 +12,7 @@ app = flask.Flask(__name__)
 # Look for a .env file
 if os.path.exists('.env'):
     dotenv.load_dotenv('.env')
+
 
 # Load configuration from environment, with defaults
 app.config['DEBUG'] = True if os.getenv('DEBUG') == 'True' else False
@@ -23,8 +25,18 @@ app.config['SESSION_SECRET'] = os.getenv('SESSION_SECRET', os.urandom(64))
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///data/hello_world.sqlite')
 app.config['SQLALCHEMY_ECHO'] = app.config['DEBUG']
 
+# work around Heroku using a different prefix than sqlalchemy requires
+app.config['SQLALCHEMY_DATABASE_URI'] = re.sub(
+    r'^postgres://',
+    r'postgresql://',
+    app.config['SQLALCHEMY_DATABASE_URI']
+)
+
 # Setup secure cookie secret
 app.secret_key = app.config['SESSION_SECRET']
+assert app.secret_key != "superstrongsecret_required_for_secure_cookies", (
+        "Secret key must be changed from the default placeholder"
+)
 
 # Setup db
 db = SQLAlchemy(app)
