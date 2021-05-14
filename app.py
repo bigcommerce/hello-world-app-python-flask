@@ -32,11 +32,21 @@ app.config['SQLALCHEMY_DATABASE_URI'] = re.sub(
     app.config['SQLALCHEMY_DATABASE_URI']
 )
 
+# work around Heroku using a tailing slash that flask routes don't expect
+app.config['APP_URL'] = re.sub(
+    r'/$',
+    r'',
+    app.config['APP_URL']
+)
+
 # Setup secure cookie secret
 app.secret_key = app.config['SESSION_SECRET']
 assert app.secret_key != "superstrongsecret_required_for_secure_cookies", (
         "Secret key must be changed from the default placeholder"
 )
+
+app.config['SESSION_COOKIE_SAMESITE'] = None
+app.config['CSRF_COOKIE_SAMESITE'] = None
 
 # Setup db
 db = SQLAlchemy(app)

@@ -66,6 +66,10 @@ it somewhere to use the app anywhere other than your development system.
 1. Click this button: [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
 2. Fill in the details from the app portal on the Heroku deployment page
   * See [Registering the app with BigCommerce](#registering-the-app-with-bigcommerce) above. Ignore the callback URLs, just save the app to get the Client ID and Client Secret.
+  * Copy non-database-URI parameters from your environment to Heroku's with the likes of
+    ```
+    cat .env | head -7 | tail -4 | xargs -I{} heroku config:set {}
+    ```
 3. Deploy the app, and click "view" when it's done
 4. Take the callback URLs from the instructions page and plug them into the dev portal.
 5. Then follow the steps under Installing the app in your trial store.
