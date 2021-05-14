@@ -2,6 +2,7 @@ from bigcommerce.api import BigcommerceApi
 import dotenv
 import flask
 from flask_sqlalchemy import SQLAlchemy
+from flask_session import Session
 from sqlalchemy.orm import relationship
 import os
 import re
@@ -47,7 +48,8 @@ assert app.secret_key != "superstrongsecret_required_for_secure_cookies", (
 
 app.config['SESSION_COOKIE_SAMESITE'] = None
 app.config['CSRF_COOKIE_SAMESITE'] = None
-
+app.config['SESSION_TYPE'] = 'filesystem'
+Session(app)
 # Setup db
 db = SQLAlchemy(app)
 
@@ -299,6 +301,8 @@ def remove_user():
 @app.route('/')
 def index():
     # Lookup user
+    # flask.session doesn't persist any data after redirects
+    #
     storeuser = StoreUser.query.filter_by(id=flask.session['storeuserid']).first()
     if storeuser is None:
         return "Not logged in!", 401
