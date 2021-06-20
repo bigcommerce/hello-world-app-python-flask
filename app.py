@@ -188,14 +188,16 @@ def auth_callback():
 @app.route('/bigcommerce/load')
 def load():
     # Decode and verify payload
-    payload = flask.request.args['signed_payload']
-    user_data = BigcommerceApi.oauth_verify_payload(payload, client_secret())
-    if user_data is False:
+    payload = flask.request.args['signed_payload_jwt']
+    try:
+        user_data = BigcommerceApi.oauth_verify_payload_jwt(payload, client_secret(), client_id())
+    except Exception as e:
+        print(e)
         return "Payload verification failed!", 401
 
     bc_user_id = user_data['user']['id']
     email = user_data['user']['email']
-    store_hash = user_data['store_hash']
+    store_hash = user_data['sub'].split('stores/')[1]
 
     # Lookup store
     store = Store.query.filter_by(store_hash=store_hash).first()
