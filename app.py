@@ -109,6 +109,11 @@ def bad_request(e):
     return content, 400
 
 
+def jwt_error(e):
+    print(f"JWT verification failed: {e}")
+    return "Payload verification failed!", 401
+
+
 # Helper for template rendering
 def render(template, context):
     return flask.render_template(template, **context)
@@ -192,8 +197,7 @@ def load():
     try:
         user_data = BigcommerceApi.oauth_verify_payload_jwt(payload, client_secret(), client_id())
     except Exception as e:
-        print(e)
-        return "Payload verification failed!", 401
+        return jwt_error(e)
 
     bc_user_id = user_data['user']['id']
     email = user_data['user']['email']
@@ -226,13 +230,14 @@ def load():
 @app.route('/bigcommerce/uninstall')
 def uninstall():
     # Decode and verify payload
-    payload = flask.request.args['signed_payload']
-    user_data = BigcommerceApi.oauth_verify_payload(payload, client_secret())
-    if user_data is False:
-        return "Payload verification failed!", 401
+    payload = flask.request.args['signed_payload_jwt']
+    try:
+        user_data = BigcommerceApi.oauth_verify_payload_jwt(payload, client_secret(), client_id())
+    except Exception as e:
+        return jwt_error(e)
 
     # Lookup store
-    store_hash = user_data['store_hash']
+    store_hash = user_data['sub'].split('stores/')[1]
     store = Store.query.filter_by(store_hash=store_hash).first()
     if store is None:
         return "Store not found!", 401
@@ -252,14 +257,13 @@ def uninstall():
 # The Remove User Callback URL.
 @app.route('/bigcommerce/remove-user')
 def remove_user():
-    # Decode and verify payload
-    payload = flask.request.args['signed_payload']
-    user_data = BigcommerceApi.oauth_verify_payload(payload, client_secret())
-    if user_data is False:
-        return "Payload verification failed!", 401
+    payload = flask.request.args['signed_payload_jwt']
+    try:
+        user_data = BigcommerceApi.oauth_verify_payload_jwt(payload, client_secret(), client_id())
+    except Exception as e:
+        return jwt_error(e)
 
-    # Lookup store
-    store_hash = user_data['store_hash']
+    store_hash = user_data['sub'].split('stores/')[1]
     store = Store.query.filter_by(store_hash=store_hash).first()
     if store is None:
         return "Store not found!", 401
