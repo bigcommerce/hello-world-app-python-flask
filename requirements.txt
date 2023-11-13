@@ -1,5 +1,5 @@
 Flask==3.0.0
-Werkzeug==3.0.0
+Werkzeug==3.0.1
 itsdangerous==2.1.2
 requests==2.31.0
 python-dotenv==0.17.1
